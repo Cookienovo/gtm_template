@@ -2,7 +2,7 @@ homepage: "https://cookienovo.com/"
 documentation: "https://github.com/Cookienovo/gtm_template"
 versions:
   # Latest version
-  - sha: XXXXXXXXXXXXXXXXXXXXXXXX
+  - sha: 4b545294782e641d2cd7ddc118e87349b195ee91
     changeNotes: initial update
     
   # Older versions
