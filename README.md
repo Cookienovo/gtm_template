@@ -3,6 +3,8 @@
 
 This documentation describes the configuration and usage of the Cookienovo Consent Management Platform (CMP) template for Google Tag Manager. The template allows website owners to manage cookie consent in compliance with privacy regulations.
 
+![Preview of created tag configuration](https://github.com/Cookienovo/gtm_template/blob/main/img/gtm-screen-1.png)
+
 ## Tag Configuration
 
 ### Basic Settings
@@ -29,6 +31,8 @@ The template allows configuration of consent behavior based on geographic region
 
 ### Triggering
 The template shoud be triggered by trigger "Consent Initialization - All Pages"
+
+![Detailed tag configuration](https://github.com/Cookienovo/gtm_template/blob/main/img/gtm-screen-2.png)
 
 ## Implementation Instructions
 
