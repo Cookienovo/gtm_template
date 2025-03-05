@@ -1,0 +1,8 @@
+homepage: "https://cookienovo.com/"
+documentation: "https://github.com/Cookienovo/gtm_template"
+versions:
+  # Latest version
+  - sha: XXXXXXXXXXXXXXXXXXXXXXXX
+    changeNotes: initial update
+    
+  # Older versions
