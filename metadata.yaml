@@ -1,11 +1,16 @@
 homepage: "https://cookienovo.com/"
 documentation: "https://github.com/Cookienovo/gtm_template"
 versions:
+
   # Latest version
-  - sha: 28ae132ccde0df1dfd74f722737ae857e0c0b218
-    changeNotes: update logo file
+  - sha: fafeb8b95426ca4985ad8c0ef19f6e20550db41d
+    changeNotes: removed logo file
+
     
   # Older versions
+  - sha: 28ae132ccde0df1dfd74f722737ae857e0c0b218
+    changeNotes: update logo file
+  
   - sha: a2614598b00bf2c1a97bf4fd00f34c8165765bd0
     changeNotes: minor change update README.md
   
