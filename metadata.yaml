@@ -1,3 +1,18 @@
+# Copyright 2019 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+
 homepage: "https://cookienovo.com/"
 documentation: "https://github.com/Cookienovo/gtm_template"
 versions:
@@ -12,7 +27,7 @@ versions:
     changeNotes: update logo file
   
   - sha: a2614598b00bf2c1a97bf4fd00f34c8165765bd0
-    changeNotes: minor change update README.md
+    changeNotes: minor change update README md
   
   - sha: 4b545294782e641d2cd7ddc118e87349b195ee91
     changeNotes: initial update
