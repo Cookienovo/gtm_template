@@ -1,16 +1,10 @@
-﻿// Copyright 2019 Google LLC
+﻿___TERMS_OF_SERVICE___
 
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
+By creating or modifying this file you agree to Google Tag Manager's Community
+Template Gallery Developer Terms of Service available at
+https://developers.google.com/tag-manager/gallery-tos (or such other URL as
+Google may provide), as modified from time to time.
 
-//     https://www.apache.org/licenses/LICENSE-2.0
-
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
 
 ___INFO___
 
@@ -305,12 +299,6 @@ ___TEMPLATE_PARAMETERS___
 
 ___SANDBOXED_JS_FOR_WEB_TEMPLATE___
 
-// https://developers.google.com/tag-platform/tag-manager/templates/consent-apis
-// https://developers.google.com/tag-platform/tag-manager/templates/api#injectscript
-
-// https://cookienovo.com/app/sites/35be4000-6e4e-47f5-aa30-f29b03492afb
-// https://kisk.sabatka.net/?dltype=gtm&gtmid=GTM-NM7B43FK
-
 const log = require('logToConsole');
 const setDefaultConsentState = require('setDefaultConsentState');
 const updateConsentState = require('updateConsentState');
@@ -339,8 +327,8 @@ const defaultConsentState = {
   'ad_personalization': data.default_consent_marketing,
   'analytics_storage': data.default_consent_analytics,
   'functionality_storage': data.default_consent_functionality,
-//  'personalization_storage': data.default_consent_functionality,   // @TODO
-//  'security_storage': data.default_consent_functionality,   // @TODO
+//  'personalization_storage': data.default_consent_functionality,
+//  'security_storage': data.default_consent_functionality,
   'wait_for_update': data.wait_for_update
 };
 
@@ -362,8 +350,8 @@ if (data.consent_mode_enabled) {
       'ad_personalization': rcs.marketing,
       'analytics_storage': rcs.analytics,
       'functionality_storage': rcs.functionality,
-//    'personalization_storage': rcs.functionality,  // @TODO - toto dořešit
-//    'security_storage': rcs.functionality,  // @TODO - toto dořešit
+//    'personalization_storage': rcs.functionality,
+//    'security_storage': rcs.functionality,
     };
     setDefaultConsentState(regionConsentState);
     log("Cookienovo: setting default state for region", regionConsentState);
