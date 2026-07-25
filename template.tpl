@@ -153,7 +153,7 @@ ___TEMPLATE_PARAMETERS___
         "name": "wait_for_update",
         "displayName": "Wait for update",
         "simpleValueType": true,
-        "defaultValue": 2000,
+        "defaultValue": 500,
         "alwaysInSummary": true,
         "canBeEmptyString": false,
         "help": "When wait_for_update is set to some value, the tag will pause its execution until updated consent state is detected or timeout occurs. This helps ensure accurate consent-based behavior when tags fire before consent is captured.",
@@ -162,7 +162,7 @@ ___TEMPLATE_PARAMETERS___
             "type": "NON_NEGATIVE_NUMBER"
           }
         ],
-        "valueHint": "2000",
+        "valueHint": "500",
         "valueUnit": "ms"
       },
       {
@@ -327,8 +327,11 @@ const defaultConsentState = {
   'ad_personalization': data.default_consent_marketing,
   'analytics_storage': data.default_consent_analytics,
   'functionality_storage': data.default_consent_functionality,
-//  'personalization_storage': data.default_consent_functionality,
-//  'security_storage': data.default_consent_functionality,
+  // Google berie NEUVEDENÝ typ ako granted, takže bez tohto riadku išli
+  // personalizačné dáta bez súhlasu — a šablóna bola menej prísna než náš
+  // priamy skript, ktorý ho na 'denied' nastavuje. security_storage zámerne
+  // NEriadime: je to nevyhnutná bezpečnostná funkcia (ochrana pred podvodmi).
+  'personalization_storage': data.default_consent_functionality,
   'wait_for_update': data.wait_for_update
 };
 
@@ -350,8 +353,10 @@ if (data.consent_mode_enabled) {
       'ad_personalization': rcs.marketing,
       'analytics_storage': rcs.analytics,
       'functionality_storage': rcs.functionality,
-//    'personalization_storage': rcs.functionality,
-//    'security_storage': rcs.functionality,
+      'personalization_storage': rcs.functionality,
+      // Bez wait_for_update sa v regióne nečaká na voľbu návštevníka a tagy
+      // odpália skôr, než lišta stihne poslať update.
+      'wait_for_update': data.wait_for_update
     };
     setDefaultConsentState(regionConsentState);
     log("Cookienovo: setting default state for region", regionConsentState);
@@ -366,18 +371,20 @@ const cookienovoState = {
   'functionality': loadConsentFromCookie('cn-category-functional')
 };
 let updatedState = {};
-if (cookienovoState.analytics !== undefined && cookienovoState.analytics !== data.default_consent_analytics) {
+// POZOR: neporovnávať s defaultom. Keď si návštevník vybral to isté, čo je
+// default, `updateConsentState` sa nezavolal vôbec — Google potom čakal celý
+// `wait_for_update` a vracajúci sa návštevník ostal na defaultnom stave.
+if (cookienovoState.analytics !== undefined) {
   updatedState.analytics_storage = cookienovoState.analytics;
 }
-if (cookienovoState.marketing !== undefined && cookienovoState.marketing !== data.default_consent_marketing) {
+if (cookienovoState.marketing !== undefined) {
   updatedState.ad_storage = cookienovoState.marketing;
   updatedState.ad_user_data = cookienovoState.marketing;
   updatedState.ad_personalization = cookienovoState.marketing;
 }
-if (cookienovoState.functionality !== undefined && cookienovoState.functionality !== data.default_consent_functionality) {
+if (cookienovoState.functionality !== undefined) {
   updatedState.functionality_storage = cookienovoState.functionality;
-//  updatedState.personalization_storage = cookienovoState.functionality;
-//  updatedState.security_storage = cookienovoState.functionality;
+  updatedState.personalization_storage = cookienovoState.functionality;
 }
 if (Object.keys(updatedState).length > 0) {
   log("Cookienovo: update consent mode with state", updatedState);
@@ -458,10 +465,6 @@ ___WEB_PERMISSIONS___
               {
                 "type": 1,
                 "string": "cn-category-marketing"
-              },
-              {
-                "type": 1,
-                "string": "cn-category-necessary"
               },
               {
                 "type": 1,
@@ -1006,7 +1009,8 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"denied",
       "functionality_storage": "denied",
-      "wait_for_update": 2000
+      "personalization_storage": "denied",
+      "wait_for_update": 500
     });
 - name: Set Google configs
   code: |-
@@ -1036,7 +1040,8 @@ scenarios:
       "ad_user_data":"granted",
       "ad_personalization":"granted",
       "analytics_storage":"granted",
-      "functionality_storage": "granted"
+      "functionality_storage": "granted",
+      "personalization_storage": "granted"
     });
 - name: Regional settings
   code: |-
@@ -1055,7 +1060,8 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"denied",
       "functionality_storage": "denied",
-      "wait_for_update": 2000
+      "personalization_storage": "denied",
+      "wait_for_update": 500
     });
 
     assertApi('setDefaultConsentState').wasCalledWith({
@@ -1064,6 +1070,8 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"denied",
       "functionality_storage": "granted",
+      "personalization_storage": "granted",
+      "wait_for_update": 500,
       "region": ["SK"]
     });
 
@@ -1074,6 +1082,8 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"granted",
       "functionality_storage": "granted",
+      "personalization_storage": "granted",
+      "wait_for_update": 500,
       "region": ["ES", "PT"]
     });
 
@@ -1083,6 +1093,8 @@ scenarios:
       "ad_personalization":"granted",
       "analytics_storage":"granted",
       "functionality_storage": "granted",
+      "personalization_storage": "granted",
+      "wait_for_update": 500,
       "region": ["US-AS"]
     });
 setup: |-
@@ -1092,7 +1104,7 @@ setup: |-
     'default_consent_functionality': 'denied',
     'default_consent_analytics': 'denied',
     'default_consent_marketing': 'denied',
-    'wait_for_update': 2000,
+    'wait_for_update': 500,
     'ads_data_redaction': false,
     'url_passthrough': true,
   };
