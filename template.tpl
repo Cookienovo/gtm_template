@@ -1043,6 +1043,31 @@ scenarios:
       "functionality_storage": "granted",
       "personalization_storage": "granted"
     });
+- name: Returning visitor with choice equal to default still updates
+  code: |-
+    mock('getCookieValues', (name) => {
+      switch (name) {
+        case 'cn-category-analytics':
+        case 'cn-category-functional':
+        case 'cn-category-marketing':
+          return ['0'];
+      }
+      return [];
+    });
+
+    runCode(mockData);
+
+    // Regresia nálezu #2: voľba návštevníka == default (denied). Starý kód
+    // (cookie !== default) by update vôbec nezavolal a vracajúci sa návštevník
+    // ostal na defaultnom stave; oprava ho volať MUSÍ.
+    assertApi('updateConsentState').wasCalledWith({
+      "ad_storage":"denied",
+      "ad_user_data":"denied",
+      "ad_personalization":"denied",
+      "analytics_storage":"denied",
+      "functionality_storage": "denied",
+      "personalization_storage": "denied"
+    });
 - name: Regional settings
   code: |-
     mockData.region_specific = [
