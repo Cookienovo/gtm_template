@@ -309,6 +309,11 @@ const gtagSet = require('gtagSet');
 const createQueue = require('createQueue');
 const setInWindow = require('setInWindow');
 const JSON = require('JSON');
+const getTimestampMillis = require('getTimestampMillis');
+const getType = require('getType');
+
+// The banner treats a choice older than 12 months as expired (SK/CZ guidance).
+const CONSENT_TTL_MS = 365 * 24 * 60 * 60 * 1000;
 
 
 setInWindow('cookienovo_token', data.id, true);
@@ -321,11 +326,16 @@ function consentValue(v) {
   return (v === 1 || v === '1' || v === true || v === 'true') ? 'granted' : 'denied';
 }
 
+// undefined = no (valid) cn-consent cookie -> fall back to legacy cookies.
+// {} = a valid cn-consent cookie without an applicable choice (undecided or
+// expired) -> authoritative, legacy cookies must not revive an old grant.
 function loadConsolidatedConsent() {
   const values = getCookieValues('cn-consent');
   if (values.length === 0) return undefined;
   const blob = JSON.parse(values[0]);
-  if (!blob || blob.d !== 1 || !blob.c) return undefined;
+  if (getType(blob) !== 'object') return undefined;
+  if (blob.d !== 1 || !blob.c) return {};
+  if (getType(blob.t) === 'number' && blob.t + CONSENT_TTL_MS < getTimestampMillis()) return {};
   return {
     'analytics': consentValue(blob.c.a),
     'marketing': consentValue(blob.c.m),
@@ -400,14 +410,33 @@ if (cookienovoState.functionality !== undefined) {
   updatedState.functionality_storage = cookienovoState.functionality;
   updatedState.personalization_storage = cookienovoState.functionality;
 }
-if (Object.keys(updatedState).length > 0) {
-  log("Cookienovo: update consent mode with state", updatedState);
-  if (data.consent_mode_enabled) {
+if (data.consent_mode_enabled) {
+  if (Object.keys(updatedState).length > 0) {
+    log("Cookienovo: update consent mode with state", updatedState);
     updateConsentState(updatedState);
-  } else {
+  }
+} else {
+  // Without Consent Mode only announce categories that differ from the
+  // defaults (unchanged behaviour), so a trigger on the event name does not
+  // fire for every rejecting visitor on every page view.
+  let changedState = {};
+  if (cookienovoState.analytics !== undefined && cookienovoState.analytics !== data.default_consent_analytics) {
+    changedState.analytics_storage = cookienovoState.analytics;
+  }
+  if (cookienovoState.marketing !== undefined && cookienovoState.marketing !== data.default_consent_marketing) {
+    changedState.ad_storage = cookienovoState.marketing;
+    changedState.ad_user_data = cookienovoState.marketing;
+    changedState.ad_personalization = cookienovoState.marketing;
+  }
+  if (cookienovoState.functionality !== undefined && cookienovoState.functionality !== data.default_consent_functionality) {
+    changedState.functionality_storage = cookienovoState.functionality;
+    changedState.personalization_storage = cookienovoState.functionality;
+  }
+  if (Object.keys(changedState).length > 0) {
+    log("Cookienovo: push consent state to dataLayer", changedState);
     const dataLayerPush = createQueue('dataLayer');
     dataLayerPush({
-      'consent': updatedState,
+      'consent': changedState,
       'event': 'cookie_consent_updated'
     });
   }
@@ -941,6 +970,45 @@ ___WEB_PERMISSIONS___
                 "mapValue": [
                   {
                     "type": 1,
+                    "string": "dataLayer"
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": true
+                  },
+                  {
+                    "type": 8,
+                    "boolean": false
+                  }
+                ]
+              },
+              {
+                "type": 3,
+                "mapKey": [
+                  {
+                    "type": 1,
+                    "string": "key"
+                  },
+                  {
+                    "type": 1,
+                    "string": "read"
+                  },
+                  {
+                    "type": 1,
+                    "string": "write"
+                  },
+                  {
+                    "type": 1,
+                    "string": "execute"
+                  }
+                ],
+                "mapValue": [
+                  {
+                    "type": 1,
                     "string": "cookienovo_token"
                   },
                   {
@@ -1046,7 +1114,7 @@ scenarios:
 - name: Consent was granted (cn-consent cookie)
   code: |-
     mock('getCookieValues', (name) => {
-      if (name === 'cn-consent') return ['{"v":1,"t":1760000000000,"ver":"abc","d":1,"c":{"n":1,"a":1,"m":1,"f":1}}'];
+      if (name === 'cn-consent') return ['{"v":1,"t":null,"ver":"abc","d":1,"c":{"n":1,"a":1,"m":1,"f":1}}'];
       return [];
     });
 
@@ -1139,6 +1207,90 @@ scenarios:
   code: |-
     runCode(mockData);
     assertApi('updateConsentState').wasNotCalled();
+- name: Choice older than 12 months is not applied
+  code: |-
+    mock('getTimestampMillis', () => 1800000000000);
+    mock('getCookieValues', (name) => {
+      // decided ~13 months before "now"
+      if (name === 'cn-consent') return ['{"v":1,"t":1766000000000,"ver":null,"d":1,"c":{"n":1,"a":1,"m":1,"f":1}}'];
+      if (name === 'cn-category-marketing') return ['true'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasNotCalled();
+- name: Fresh choice with a timestamp is applied
+  code: |-
+    mock('getTimestampMillis', () => 1800000000000);
+    mock('getCookieValues', (name) => {
+      if (name === 'cn-consent') return ['{"v":1,"t":1799000000000,"ver":null,"d":1,"c":{"n":1,"a":0,"m":1,"f":0}}'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasCalledWith({
+      "ad_storage":"granted",
+      "ad_user_data":"granted",
+      "ad_personalization":"granted",
+      "analytics_storage":"denied",
+      "functionality_storage": "denied",
+      "personalization_storage": "denied"
+    });
+- name: Undecided cn-consent cookie ignores legacy cookies
+  code: |-
+    mock('getCookieValues', (name) => {
+      if (name === 'cn-consent') return ['{"v":1,"t":null,"ver":null,"d":0,"c":{"n":1,"a":0,"m":0,"f":0}}'];
+      if (name.indexOf('cn-category-') === 0) return ['true'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasNotCalled();
+- name: Legacy cookies with 1/0 values
+  code: |-
+    mock('getCookieValues', (name) => {
+      switch (name) {
+        case 'cn-category-analytics':
+          return ['1'];
+        case 'cn-category-marketing':
+        case 'cn-category-functional':
+          return ['0'];
+      }
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasCalledWith({
+      "ad_storage":"denied",
+      "ad_user_data":"denied",
+      "ad_personalization":"denied",
+      "analytics_storage":"granted",
+      "functionality_storage": "denied",
+      "personalization_storage": "denied"
+    });
+- name: Without Consent Mode only changed categories are pushed to the dataLayer
+  code: |-
+    mockData.consent_mode_enabled = false;
+    let pushed = [];
+    mock('createQueue', (name) => {
+      return (obj) => { pushed.push(obj); };
+    });
+    mock('getCookieValues', (name) => {
+      if (name === 'cn-consent') return ['{"v":1,"t":null,"ver":null,"d":1,"c":{"n":1,"a":1,"m":0,"f":0}}'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasNotCalled();
+    assertApi('setDefaultConsentState').wasNotCalled();
+    assertThat(pushed.length).isEqualTo(1);
+    assertThat(pushed[0]).isEqualTo({'consent': {'analytics_storage': 'granted'}, 'event': 'cookie_consent_updated'});
+    assertApi('gtmOnSuccess').wasCalled();
 - name: Regional settings
   code: |-
     mockData.region_specific = [
