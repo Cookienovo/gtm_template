@@ -18,11 +18,13 @@ documentation: "https://github.com/Cookienovo/gtm_template"
 versions:
 
   # Latest version
+  - sha: a20451b0a04bb5f7f2a44b3c6eea945127267141
+    changeNotes: Reads the banner's current consent cookie (cn-consent) so a returning visitor's choice is applied on page load; stored choice is applied even when equal to the global default (region-specific defaults); adds personalization_storage; wait_for_update for region-specific defaults (default 500 ms); choices older than 12 months are ignored.
+
+  # Older versions
   - sha: 072979e77faa6ab86264e168f76fedb1b1300bff
     changeNotes: added logo
 
-    
-  # Older versions
   - sha: 974d63d8867dea4eb9e59a46062b999841a3df67
     changeNotes: removed comments
 
