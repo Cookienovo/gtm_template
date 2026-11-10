@@ -153,7 +153,7 @@ ___TEMPLATE_PARAMETERS___
         "name": "wait_for_update",
         "displayName": "Wait for update",
         "simpleValueType": true,
-        "defaultValue": 2000,
+        "defaultValue": 500,
         "alwaysInSummary": true,
         "canBeEmptyString": false,
         "help": "When wait_for_update is set to some value, the tag will pause its execution until updated consent state is detected or timeout occurs. This helps ensure accurate consent-based behavior when tags fire before consent is captured.",
@@ -162,7 +162,7 @@ ___TEMPLATE_PARAMETERS___
             "type": "NON_NEGATIVE_NUMBER"
           }
         ],
-        "valueHint": "2000",
+        "valueHint": "500",
         "valueUnit": "ms"
       },
       {
@@ -308,15 +308,35 @@ const Object = require('Object');
 const gtagSet = require('gtagSet');
 const createQueue = require('createQueue');
 const setInWindow = require('setInWindow');
+const JSON = require('JSON');
 
 
 setInWindow('cookienovo_token', data.id, true);
 
 
-function loadConsentFromCookie(consent) {
-  var status = getCookieValues(consent);
+// Stored visitor choice. The banner keeps it in a single `cn-consent` cookie
+// (JSON: d = decided 0/1, c = {n, a, m, f} categories 0/1). Older banner
+// versions wrote `cn-category-*` cookies with "true"/"false" values.
+function consentValue(v) {
+  return (v === 1 || v === '1' || v === true || v === 'true') ? 'granted' : 'denied';
+}
+
+function loadConsolidatedConsent() {
+  const values = getCookieValues('cn-consent');
+  if (values.length === 0) return undefined;
+  const blob = JSON.parse(values[0]);
+  if (!blob || blob.d !== 1 || !blob.c) return undefined;
+  return {
+    'analytics': consentValue(blob.c.a),
+    'marketing': consentValue(blob.c.m),
+    'functionality': consentValue(blob.c.f)
+  };
+}
+
+function loadLegacyConsent(name) {
+  const status = getCookieValues(name);
   if (status.length === 0) return undefined;
-  return (status[0] == 1) ? 'granted' : 'denied'; 
+  return consentValue(status[0]);
 }
 
 
@@ -327,8 +347,7 @@ const defaultConsentState = {
   'ad_personalization': data.default_consent_marketing,
   'analytics_storage': data.default_consent_analytics,
   'functionality_storage': data.default_consent_functionality,
-//  'personalization_storage': data.default_consent_functionality,
-//  'security_storage': data.default_consent_functionality,
+  'personalization_storage': data.default_consent_functionality,
   'wait_for_update': data.wait_for_update
 };
 
@@ -350,8 +369,8 @@ if (data.consent_mode_enabled) {
       'ad_personalization': rcs.marketing,
       'analytics_storage': rcs.analytics,
       'functionality_storage': rcs.functionality,
-//    'personalization_storage': rcs.functionality,
-//    'security_storage': rcs.functionality,
+      'personalization_storage': rcs.functionality,
+      'wait_for_update': data.wait_for_update
     };
     setDefaultConsentState(regionConsentState);
     log("Cookienovo: setting default state for region", regionConsentState);
@@ -360,24 +379,26 @@ if (data.consent_mode_enabled) {
 
 
 
-const cookienovoState = {
-  'analytics': loadConsentFromCookie('cn-category-analytics'),
-  'marketing': loadConsentFromCookie('cn-category-marketing'),
-  'functionality': loadConsentFromCookie('cn-category-functional')
+const cookienovoState = loadConsolidatedConsent() || {
+  'analytics': loadLegacyConsent('cn-category-analytics'),
+  'marketing': loadLegacyConsent('cn-category-marketing'),
+  'functionality': loadLegacyConsent('cn-category-functional')
 };
+// Always apply a stored choice, not only when it differs from the global
+// default: a region-specific default (e.g. EU denied while global is granted)
+// would otherwise stay in force after the visitor consented.
 let updatedState = {};
-if (cookienovoState.analytics !== undefined && cookienovoState.analytics !== data.default_consent_analytics) {
+if (cookienovoState.analytics !== undefined) {
   updatedState.analytics_storage = cookienovoState.analytics;
 }
-if (cookienovoState.marketing !== undefined && cookienovoState.marketing !== data.default_consent_marketing) {
+if (cookienovoState.marketing !== undefined) {
   updatedState.ad_storage = cookienovoState.marketing;
   updatedState.ad_user_data = cookienovoState.marketing;
   updatedState.ad_personalization = cookienovoState.marketing;
 }
-if (cookienovoState.functionality !== undefined && cookienovoState.functionality !== data.default_consent_functionality) {
+if (cookienovoState.functionality !== undefined) {
   updatedState.functionality_storage = cookienovoState.functionality;
-//  updatedState.personalization_storage = cookienovoState.functionality;
-//  updatedState.security_storage = cookienovoState.functionality;
+  updatedState.personalization_storage = cookienovoState.functionality;
 }
 if (Object.keys(updatedState).length > 0) {
   log("Cookienovo: update consent mode with state", updatedState);
@@ -395,11 +416,11 @@ if (Object.keys(updatedState).length > 0) {
 
 const url = 'https://cookienovo.com/assets/client.js';
 injectScript(url, () => {
-  log("Cookienovo: stript loaded", data);
+  log("Cookienovo: script loaded", data);
   setInWindow('cookienovo_injected', true, true);
   data.gtmOnSuccess();
 }, () => {
-  log("Cookienovo: stript loading failed", data);
+  log("Cookienovo: script loading failed", data);
   data.gtmOnFailure();
 });
 
@@ -447,6 +468,10 @@ ___WEB_PERMISSIONS___
           "value": {
             "type": 2,
             "listItem": [
+              {
+                "type": 1,
+                "string": "cn-consent"
+              },
               {
                 "type": 1,
                 "string": "cn-category-analytics"
@@ -1006,6 +1031,7 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"denied",
       "functionality_storage": "denied",
+      "personalization_storage": "denied",
       "wait_for_update": 2000
     });
 - name: Set Google configs
@@ -1017,15 +1043,10 @@ scenarios:
   code: |-
     runCode(mockData);
     assertApi('gtagSet').wasCalledWith('developer_id.dMjZhMT', true);
-- name: Consent was granted
+- name: Consent was granted (cn-consent cookie)
   code: |-
     mock('getCookieValues', (name) => {
-      switch (name) {
-        case 'cn-category-analytics':
-        case 'cn-category-functional':
-        case 'cn-category-marketing':
-          return ['1'];
-      }
+      if (name === 'cn-consent') return ['{"v":1,"t":1760000000000,"ver":"abc","d":1,"c":{"n":1,"a":1,"m":1,"f":1}}'];
       return [];
     });
 
@@ -1036,8 +1057,88 @@ scenarios:
       "ad_user_data":"granted",
       "ad_personalization":"granted",
       "analytics_storage":"granted",
-      "functionality_storage": "granted"
+      "functionality_storage": "granted",
+      "personalization_storage": "granted"
     });
+- name: Mixed choice (cn-consent cookie)
+  code: |-
+    mock('getCookieValues', (name) => {
+      if (name === 'cn-consent') return ['{"v":1,"t":null,"ver":null,"d":1,"c":{"n":1,"a":1,"m":0,"f":0}}'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasCalledWith({
+      "ad_storage":"denied",
+      "ad_user_data":"denied",
+      "ad_personalization":"denied",
+      "analytics_storage":"granted",
+      "functionality_storage": "denied",
+      "personalization_storage": "denied"
+    });
+- name: Stored choice equal to the default is still applied (region-specific defaults)
+  code: |-
+    mockData.default_consent_marketing = 'granted';
+    mockData.default_consent_analytics = 'granted';
+    mockData.default_consent_functionality = 'granted';
+    mockData.region_specific = [
+      {"region":"SK","functionality":"denied","analytics":"denied","marketing":"denied"}
+    ];
+    mock('getCookieValues', (name) => {
+      if (name === 'cn-consent') return ['{"v":1,"t":null,"ver":null,"d":1,"c":{"n":1,"a":1,"m":1,"f":1}}'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasCalledWith({
+      "ad_storage":"granted",
+      "ad_user_data":"granted",
+      "ad_personalization":"granted",
+      "analytics_storage":"granted",
+      "functionality_storage": "granted",
+      "personalization_storage": "granted"
+    });
+- name: Undecided cn-consent cookie does not update consent
+  code: |-
+    mock('getCookieValues', (name) => {
+      if (name === 'cn-consent') return ['{"v":1,"t":null,"ver":null,"d":0,"c":{"n":1,"a":0,"m":0,"f":0}}'];
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasNotCalled();
+- name: Invalid cn-consent cookie falls back to legacy cookies
+  code: |-
+    mock('getCookieValues', (name) => {
+      switch (name) {
+        case 'cn-consent':
+          return ['not json'];
+        case 'cn-category-analytics':
+          return ['true'];
+        case 'cn-category-marketing':
+        case 'cn-category-functional':
+          return ['false'];
+      }
+      return [];
+    });
+
+    runCode(mockData);
+
+    assertApi('updateConsentState').wasCalledWith({
+      "ad_storage":"denied",
+      "ad_user_data":"denied",
+      "ad_personalization":"denied",
+      "analytics_storage":"granted",
+      "functionality_storage": "denied",
+      "personalization_storage": "denied"
+    });
+- name: No stored choice does not update consent
+  code: |-
+    runCode(mockData);
+    assertApi('updateConsentState').wasNotCalled();
 - name: Regional settings
   code: |-
     mockData.region_specific = [
@@ -1055,6 +1156,7 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"denied",
       "functionality_storage": "denied",
+      "personalization_storage": "denied",
       "wait_for_update": 2000
     });
 
@@ -1064,6 +1166,8 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"denied",
       "functionality_storage": "granted",
+      "personalization_storage": "granted",
+      "wait_for_update": 2000,
       "region": ["SK"]
     });
 
@@ -1074,6 +1178,8 @@ scenarios:
       "ad_personalization":"denied",
       "analytics_storage":"granted",
       "functionality_storage": "granted",
+      "personalization_storage": "granted",
+      "wait_for_update": 2000,
       "region": ["ES", "PT"]
     });
 
@@ -1083,6 +1189,8 @@ scenarios:
       "ad_personalization":"granted",
       "analytics_storage":"granted",
       "functionality_storage": "granted",
+      "personalization_storage": "granted",
+      "wait_for_update": 2000,
       "region": ["US-AS"]
     });
 setup: |-
